@@ -1,0 +1,27 @@
+name: Validate Branch Name
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-branch-name:
+    name: Check Branch Name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch name pattern
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          PATTERN="^task/wk-[a-zA-Z0-9._-]+$"
+
+          echo "Branch name: $BRANCH"
+
+          if [[ ! "$BRANCH" =~ $PATTERN ]]; then
+            echo "❌ Branch name '$BRANCH' does not follow the required pattern."
+            echo ""
+            echo "Expected format: task/wk-<identifier>"
+            echo "Examples: task/wk-123, task/wk-fix-login, task/wk-1.2"
+            exit 1
+          fi
+
+          echo "✅ Branch name '$BRANCH' is valid."
