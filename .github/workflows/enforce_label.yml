@@ -1,8 +1,12 @@
 name: Auto Label PR
 
 on:
-  pull_request:
-    types: [opened, reopened, closed]
+  workflow_run:
+    workflows:
+      - "Validate Branch Name"
+      - "Validate Commit Messages"
+    types:
+      - completed
 
 permissions:
   pull-requests: write
@@ -11,7 +15,7 @@ permissions:
 jobs:
   add-label:
     name: Add 'ready for review' label
-    if: github.event.action == 'opened' || github.event.action == 'reopened'
+    if: github.event.workflow_run.conclusion == 'success' && (github.event.action == 'opened' || github.event.action == 'reopened')
     runs-on: ubuntu-latest
     steps:
       - name: Add label
@@ -27,13 +31,13 @@ jobs:
 
   remove-label:
     name: Remove 'ready for review' label
-    if: github.event.action == 'closed'
+    if: github.event.workflow_run.conclusion != 'success' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     steps:
       - name: Remove label
         uses: actions/github-script@v7
         with:
-          script: |
+          script: |            
             try {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
