@@ -2,56 +2,85 @@ name: Auto Label PR
 
 on:
   pull_request:
-    types: [opened, reopened, closed]
+    types: [opened, reopened, synchronize]
+  pull_request_target:
+    types: [closed]
 
 permissions:
   pull-requests: write
   issues: write
+  checks: read
 
 jobs:
-  add-label:
-    name: Add 'ready for review' label
-    if: github.event.action == 'opened' || github.event.action == 'reopened'
+  manage-label:
+    name: Manage 'ready for review' label
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Add label
+      - name: Add or remove label based on checks and PR state
         uses: actions/github-script@v7
         with:
           script: |
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              labels: ['ready for review']
-            })
+            const prNumber = context.payload.pull_request.number
 
-  remove-label:
-    name: Remove 'ready for review' label
-    if: github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Remove label
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.issues.removeLabel({
+            // Poll until both checks have completed (max 10 attempts, 10s apart)
+            const required = ['Check Branch Name', 'Check Commit Messages']
+            const sha = context.payload.pull_request.head.sha
+            let results = []
+
+            for (let i = 0; i < 10; i++) {
+              const checks = await github.rest.checks.listForRef({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                name: 'ready for review'
+                ref: sha
               })
-            } catch (e) {
-              if (e.status === 404) {
-                console.log('Label was not present, skipping.')
-              } else {
-                throw e
+
+              results = checks.data.check_runs.filter(c => required.includes(c.name))
+              const allDone = required.every(name =>
+                results.some(c => c.name === name && c.status === 'completed')
+              )
+
+              console.log(`Attempt ${i + 1}: ${results.map(c => `${c.name}: ${c.status}/${c.conclusion}`).join(', ')}`)
+
+              if (allDone) break
+
+              await new Promise(r => setTimeout(r, 10000))
+            }
+
+            const allPassed = required.every(name =>
+              results.some(c => c.name === name && c.conclusion === 'success')
+            )
+
+            if (allPassed) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['ready for review']
+              })
+              console.log('Both checks passed — label added.')
+            } else {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: 'ready for review'
+                })
+                console.log('Checks not passed — label removed.')
+              } catch (e) {
+                if (e.status === 404) {
+                  console.log('Label was not present, skipping.')
+                } else {
+                  throw e
+                }
               }
             }
 
-  add-label-m:
+
+  add-label-merged:
     name: Add 'merged' label
-    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Add label
