@@ -1,0 +1,59 @@
+name: Validate Commit Messages
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-commit-messages:
+    name: Check Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          PATTERN="^task/wk-"
+          INVALID=0
+
+          echo "Checking commits in this PR..."
+          echo ""
+
+          # Get all commits in the PR (from base to head)
+          COMMITS=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%H %s")
+
+          if [ -z "$COMMITS" ]; then
+            echo "⚠️ No commits found to validate."
+            exit 0
+          fi
+
+          while IFS= read -r line; do
+            HASH=$(echo "$line" | cut -d' ' -f1)
+            MESSAGE=$(echo "$line" | cut -d' ' -f2-)
+            SHORT_HASH="${HASH:0:7}"
+
+            if [[ ! "$MESSAGE" =~ $PATTERN ]]; then
+              echo "❌ [$SHORT_HASH] '$MESSAGE'"
+              echo "   Does not match required pattern: task/wk-<identifier>"
+              INVALID=$((INVALID + 1))
+            else
+              echo "✅ [$SHORT_HASH] '$MESSAGE'"
+            fi
+          done <<< "$COMMITS"
+
+          echo ""
+
+          if [ "$INVALID" -gt 0 ]; then
+            echo "Found $INVALID invalid commit message(s)."
+            echo ""
+            echo "All commit messages must start with: task/wk-"
+            echo "Examples:"
+            echo "  task/wk-123: add login button"
+            echo "  task/wk-fix-auth: resolve token expiry bug"
+            exit 1
+          fi
+
+          echo "All commit messages are valid. ✅"
