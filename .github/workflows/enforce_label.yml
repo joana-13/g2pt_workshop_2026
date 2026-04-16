@@ -77,6 +77,18 @@ jobs:
               }
             }
 
+  remove-label-on-close:
+      name: Remove 'ready for review' label on close
+      if: github.event_name == 'pull_request_target'
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Remove 'ready for review' label on close
+          uses: ./.github/actions/remove-ready-for-review
+          with:
+            pr-number: ${{ github.event.pull_request.number }}
+            github-token: ${{ secrets.GITHUB_TOKEN }}
 
   add-label-merged:
     name: Add 'merged' label

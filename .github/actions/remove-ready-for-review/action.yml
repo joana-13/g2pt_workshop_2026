@@ -1,0 +1,34 @@
+name: Remove Ready for Review Label
+description: Removes the 'ready for review' label from a PR if present
+
+inputs:
+  pr-number:
+    description: Pull Request number
+    required: true
+  github-token:
+    description: GitHub token
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Remove label
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          try {
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ inputs.pr-number }},
+              name: 'ready for review'
+            })
+            console.log("'ready for review' label removed.")
+          } catch (e) {
+            if (e.status === 404) {
+              console.log("'ready for review' label was not present, skipping.")
+            } else {
+              throw e
+            }
+          }
